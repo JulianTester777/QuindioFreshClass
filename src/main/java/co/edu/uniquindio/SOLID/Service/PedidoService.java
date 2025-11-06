@@ -10,6 +10,8 @@ import co.edu.uniquindio.SOLID.Service.Notificacion.Notificacion;
 import co.edu.uniquindio.SOLID.Service.Notificacion.NotificacionFactory;
 import co.edu.uniquindio.SOLID.Service.Pago.MetodoPago;
 import co.edu.uniquindio.SOLID.Service.Pago.PagoFactory;
+import co.edu.uniquindio.SOLID.Service.Srevice_Descuento.EstrategiaDescuento;
+import co.edu.uniquindio.SOLID.Service.Srevice_Descuento.GestorDescuento;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -123,7 +125,43 @@ public class PedidoService {
     /**
      * Calcula total simple
      */
-    public double calcularTotal(double subtotal, double costoEnvio) {
-        return subtotal + costoEnvio;
+    public double calcularTotal(String sku, String tipoEnvio, ArrayList<ItemPedidoDTO> itemsDTO) {
+        double costoEnvio = calcularCostoEnvio(tipoEnvio);
+        double subtotal = calcularSubtotal(itemsDTO);
+        double total = subtotal + costoEnvio;
+
+
+        List<ItemPedido> items = new ArrayList<>();
+        for (ItemPedidoDTO dto : itemsDTO) {
+            Producto prod = catalogoProductosService.buscarProducto(dto.skuProducto);
+            if (prod != null) {
+                items.add(new ItemPedido(prod, dto.cantidad));
+            }
+        }
+
+        Cliente cliente = clienteService.buscarClienteEntity(sku);
+
+        String codigo = "PED-" + System.currentTimeMillis();
+
+        Pedido pedido = new PedidoBuilder(codigo, cliente, items, "Calle Principal #123")
+                .withNotas("Pedido generado automáticamente")
+                .withCodigoDescuento("DESC5000") // opcional
+                .build();
+
+        GestorDescuento gestor = new GestorDescuento();
+
+        ArrayList<EstrategiaDescuento> estrategias = new ArrayList<>();
+        estrategias.add(gestor.obtenerEstrategia("DTO10", pedido));
+        estrategias.add(gestor.obtenerEstrategia("DESC5000", pedido));
+        estrategias.add(gestor.obtenerEstrategia("VOL15", pedido));
+
+        for (EstrategiaDescuento estrategia : estrategias) {
+            if (estrategia != null && estrategia.esAplicable(pedido)) {
+                total = estrategia.calcularDescuento(total, pedido);
+            }
+        }
+
+        return total;
     }
+
 }
